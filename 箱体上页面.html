@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anaerobic Digestion Simulator</title>
+  
+  <!-- 加载 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 加载 Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* 模拟 Framer Motion 的自定义动画 */
+    @keyframes bounce-y {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-5px); }
+    }
+    
+    @keyframes pulse-x {
+      0%, 100% { transform: translateX(0); opacity: var(--arrow-base-opacity, 0.2); }
+      50% { transform: translateX(10px); opacity: 1; }
+    }
+
+    @keyframes pulse-x-diag-down {
+      0%, 100% { transform: translate(0, 0) rotate(-45deg); opacity: var(--arrow-base-opacity, 0.2); }
+      50% { transform: translate(10px, -10px) rotate(-45deg); opacity: 1; }
+    }
+
+    @keyframes pulse-x-diag-up {
+      0%, 100% { transform: translate(0, 0) rotate(45deg); opacity: var(--arrow-base-opacity, 0.2); }
+      50% { transform: translate(10px, 10px) rotate(45deg); opacity: 1; }
+    }
+    
+    @keyframes wobble {
+      0%, 100% { transform: rotate(0deg) translateY(0); }
+      25% { transform: rotate(1.5deg) translateY(-2px); }
+      75% { transform: rotate(-1.5deg) translateY(-2px); }
+    }
+    
+    @keyframes float-up {
+      0% { transform: translateY(0); opacity: 0; }
+      10% { opacity: 1; }
+      90% { opacity: 1; }
+      100% { transform: translateY(-180px); opacity: 0; }
+    }
+    
+    @keyframes pop-scale {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+    }
+
+    .anim-in-badge { animation: bounce-y var(--anim-duration, 0.5s) infinite; }
+    .anim-arrow-1 { animation: pulse-x 1s infinite; }
+    .anim-slurry { transition: height 0.3s ease; }
+    .anim-slurry-wobble { animation: wobble var(--wobble-duration, 1s) infinite; }
+    .anim-bubble { animation: float-up linear infinite; }
+    .anim-chp { animation: pop-scale 1.5s infinite; }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-r from-[#212735] to-[#191F2D] text-slate-200 p-4 sm:p-6 font-sans selection:bg-[#82DB89]/30 relative">
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between bg-[#3A4151] p-6 rounded-2xl shadow-xl gap-4">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+          <i data-lucide="factory" class="text-[#82DB89] w-8 h-8"></i>
+          Anaerobic Digestion Simulator
+        </h1>
+        <p class="text-slate-400 mt-1 text-sm sm:text-base">Interactive model of a biogas plant process</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+        <div class="bg-[#212735] px-4 py-2 rounded-xl flex items-center gap-2 flex-1 sm:flex-none justify-center">
+          <i data-lucide="activity" class="w-4 h-4 text-[#82DB89]"></i>
+          <span class="text-sm text-slate-400">Efficiency:</span>
+          <span class="font-bold text-white" id="out-efficiency">100%</span>
+        </div>
+        <div id="health-box" class="px-4 py-2 rounded-xl border flex items-center gap-2 flex-1 sm:flex-none justify-center">
+          <!-- 动态健康状态图标 -->
+          <i data-lucide="activity" id="hi-activity" class="w-5 h-5 hidden"></i>
+          <i data-lucide="thermometer" id="hi-thermometer" class="w-5 h-5 hidden"></i>
+          <i data-lucide="alert-triangle" id="hi-alert" class="w-5 h-5 hidden"></i>
+          <span class="font-bold text-sm" id="out-health">Optimal</span>
+        </div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Controls Panel -->
+      <div class="bg-[#3A4151] p-6 rounded-2xl shadow-xl space-y-8">
+        <h2 class="text-lg font-bold text-white flex items-center gap-2 border-b border-white/10 pb-4">
+          <i data-lucide="settings" class="text-slate-400 w-5 h-5"></i>
+          Process Controls
+        </h2>
+
+        <!-- Feedstock Slider -->
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <label class="text-sm font-medium text-slate-300 flex items-center gap-2">
+              <i data-lucide="truck" class="w-4 h-4 text-[#82DB89]"></i>
+              Feedstock Input
+            </label>
+            <span class="text-sm font-bold text-[#82DB89] bg-[#82DB89]/10 px-2 py-1 rounded-md">
+              <span id="val-feedstock">500</span> kg/day
+            </span>
+          </div>
+          <input 
+            type="range" 
+            id="input-feedstock"
+            min="0" max="1000" 
+            value="500" 
+            class="w-full accent-[#82DB89] h-2 bg-[#212735] rounded-lg appearance-none cursor-pointer"
+          />
+          <p class="text-xs text-slate-500 leading-relaxed">Organic waste (manure, food waste) added to the digester daily.</p>
+        </div>
+
+        <!-- Temperature Slider -->
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <label class="text-sm font-medium text-slate-300 flex items-center gap-2">
+              <i data-lucide="thermometer" class="w-4 h-4 text-red-400"></i>
+              Digester Temperature
+            </label>
+            <span class="text-sm font-bold text-red-400 bg-red-400/10 px-2 py-1 rounded-md">
+              <span id="val-temperature">38</span> °C
+            </span>
+          </div>
+          <input 
+            type="range" 
+            id="input-temperature"
+            min="10" max="70" 
+            value="38" 
+            class="w-full accent-red-500 h-2 bg-[#212735] rounded-lg appearance-none cursor-pointer"
+          />
+          <div class="flex justify-between text-[10px] sm:text-xs font-medium">
+            <span class="text-blue-400/70">Psychrophilic</span>
+            <span class="text-green-400/70">Mesophilic (~38°C)</span>
+            <span class="text-orange-400/70">Thermophilic (~55°C)</span>
+          </div>
+        </div>
+
+        <!-- Mixing Speed Slider -->
+        <div class="space-y-4">
+          <div class="flex justify-between items-center">
+            <label class="text-sm font-medium text-slate-300 flex items-center gap-2">
+              <i data-lucide="wind" class="w-4 h-4 text-teal-400"></i>
+              Mixing Speed
+            </label>
+            <span class="text-sm font-bold text-teal-400 bg-teal-400/10 px-2 py-1 rounded-md">
+              <span id="val-mixing">60</span> %
+            </span>
+          </div>
+          <input 
+            type="range" 
+            id="input-mixing"
+            min="0" max="100" 
+            value="60" 
+            class="w-full accent-teal-500 h-2 bg-[#212735] rounded-lg appearance-none cursor-pointer"
+          />
+          <p class="text-xs text-slate-500 leading-relaxed">Ensures even heat distribution and prevents crust formation.</p>
+        </div>
+      </div>
+
+      <!-- Visualization Panel -->
+      <div class="lg:col-span-2 bg-[#3A4151] p-6 rounded-2xl shadow-xl flex flex-col">
+        <h2 class="text-lg font-bold text-white mb-6 border-b border-white/10 pb-4 flex items-center gap-2">
+          <i data-lucide="activity" class="text-slate-400 w-5 h-5"></i>
+          Live Plant Visualization
+        </h2>
+        
+        <div class="flex-1 flex items-center justify-center bg-[#212735] rounded-xl border border-[#3A4151] p-4 sm:p-8 overflow-hidden relative">
+          
+          <div class="flex items-center justify-center w-full gap-2 sm:gap-6 md:gap-10">
+            <!-- 1. Reception -->
+            <div class="z-10 flex flex-col items-center">
+              <div class="w-16 h-16 sm:w-24 sm:h-24 bg-[#212735] rounded-full flex items-center justify-center border-4 border-[#3A4151] shadow-2xl relative">
+                <i data-lucide="truck" class="w-8 h-8 sm:w-10 sm:h-10 text-[#82DB89]"></i>
+                <div id="anim-in-badge" class="anim-in-badge absolute -top-3 bg-[#82DB89] text-slate-900 text-[10px] sm:text-xs px-2 py-0.5 rounded-full font-bold shadow-lg shadow-[#82DB89]/20" style="--anim-duration: 0.5s">
+                  IN
+                </div>
+              </div>
+              <span class="mt-3 text-[10px] sm:text-sm font-bold text-slate-400">Reception</span>
+            </div>
+
+            <!-- Arrow 1 -->
+            <div id="anim-arrow-1" class="z-10 text-slate-600 anim-arrow-1" style="--arrow-base-opacity: 1;">
+              <i data-lucide="arrow-right" class="w-5 h-5 sm:w-8 sm:h-8"></i>
+            </div>
+
+            <!-- 2. Digester -->
+            <div class="z-10 flex flex-col items-center">
+              <div class="w-28 h-36 sm:w-40 sm:h-48 bg-[#212735] rounded-t-full rounded-b-2xl flex flex-col items-center justify-end border-4 border-[#3A4151] shadow-2xl relative overflow-hidden">
+                
+                <!-- Slurry Level & Bubbles -->
+                <div id="anim-slurry" class="anim-slurry anim-slurry-wobble absolute bottom-0 w-full bg-amber-900/60 border-t border-amber-800/50" style="height: 55%; --wobble-duration: 2s;">
+                   <!-- Bubbles Pool -->
+                   <div id="bubbles-container">
+                      <!-- Max 12 bubbles predefined for JS control -->
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 14%; bottom: 10%; animation-duration: 1.5s; animation-delay: 0.2s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 28%; bottom: 10%; animation-duration: 2.1s; animation-delay: 1.1s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 45%; bottom: 10%; animation-duration: 1.2s; animation-delay: 0.8s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 67%; bottom: 10%; animation-duration: 1.8s; animation-delay: 0.3s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 82%; bottom: 10%; animation-duration: 2.4s; animation-delay: 1.5s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 55%; bottom: 10%; animation-duration: 1.6s; animation-delay: 0.5s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 23%; bottom: 10%; animation-duration: 2.0s; animation-delay: 0.9s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 77%; bottom: 10%; animation-duration: 1.3s; animation-delay: 1.4s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 36%; bottom: 10%; animation-duration: 2.2s; animation-delay: 0.6s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 61%; bottom: 10%; animation-duration: 1.4s; animation-delay: 1.8s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 90%; bottom: 10%; animation-duration: 1.9s; animation-delay: 0.4s;"></div>
+                      <div class="sys-bubble anim-bubble absolute w-1.5 h-1.5 sm:w-2.5 sm:h-2.5 bg-amber-400/50 rounded-full" style="left: 41%; bottom: 10%; animation-duration: 2.5s; animation-delay: 1.2s;"></div>
+                   </div>
+                </div>
+                
+                <i data-lucide="factory" class="w-10 h-10 sm:w-12 sm:h-12 text-white mb-6 sm:mb-8 z-10 relative"></i>
+                
+                <!-- Temp indicator -->
+                <div class="absolute top-3 right-3 sm:top-4 sm:right-4 flex items-center bg-[#212735]/80 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-[10px] sm:text-xs font-bold z-10 border border-white/5 backdrop-blur-sm">
+                  <i data-lucide="thermometer" id="icon-digester-temp" class="w-3 h-3 mr-1 text-green-500"></i>
+                  <span id="out-digester-temp">38°C</span>
+                </div>
+              </div>
+              <span class="mt-3 text-[10px] sm:text-sm font-bold text-slate-400">Anaerobic Digester</span>
+            </div>
+
+            <!-- Split Arrows -->
+            <div class="z-10 flex flex-col justify-center gap-10 sm:gap-16">
+              <div id="anim-arrow-top" class="text-slate-600" style="--arrow-base-opacity: 1; animation: pulse-x-diag-down 1s infinite;">
+                <i data-lucide="arrow-right" class="w-5 h-5 sm:w-8 sm:h-8"></i>
+              </div>
+              <div id="anim-arrow-bottom" class="text-slate-600" style="--arrow-base-opacity: 1; animation: pulse-x-diag-up 1s infinite;">
+                <i data-lucide="arrow-right" class="w-5 h-5 sm:w-8 sm:h-8"></i>
+              </div>
+            </div>
+
+            <!-- 3. Outputs -->
+            <div class="z-10 flex flex-col gap-6 sm:gap-10">
+              <!-- Biogas -->
+              <div class="flex flex-col items-center">
+                <div class="w-14 h-14 sm:w-20 sm:h-20 bg-[#212735] rounded-xl flex items-center justify-center border-4 border-[#3A4151] shadow-2xl relative">
+                  <i data-lucide="flame" id="icon-biogas" class="w-6 h-6 sm:w-10 sm:h-10 text-orange-500"></i>
+                  
+                  <div id="anim-chp" class="anim-chp absolute -top-3 -right-4 sm:-right-3 bg-yellow-500 text-slate-900 text-[9px] sm:text-xs font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-full flex items-center shadow-lg shadow-yellow-500/20">
+                    <i data-lucide="zap" class="w-3 h-3 mr-0.5"></i>
+                    CHP
+                  </div>
+                </div>
+                <span class="mt-2 text-[10px] sm:text-xs font-bold text-slate-400 text-center leading-tight">Biogas &<br/>Power</span>
+              </div>
+
+              <!-- Digestate -->
+              <div class="flex flex-col items-center">
+                <div class="w-14 h-14 sm:w-20 sm:h-20 bg-[#212735] rounded-xl flex items-center justify-center border-4 border-[#3A4151] shadow-2xl">
+                  <i data-lucide="sprout" id="icon-digestate" class="w-6 h-6 sm:w-10 sm:h-10 text-green-500"></i>
+                </div>
+                <span class="mt-2 text-[10px] sm:text-xs font-bold text-slate-400 text-center leading-tight">Digestate<br/>Fertilizer</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics / Outputs Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div class="bg-[#3A4151] p-6 rounded-2xl shadow-xl flex items-center gap-5 relative overflow-hidden group">
+        <div class="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div class="p-4 bg-orange-500/10 rounded-xl border border-orange-500/20 z-10">
+          <i data-lucide="flame" class="w-8 h-8 text-orange-500"></i>
+        </div>
+        <div class="z-10">
+          <p class="text-sm text-slate-400 font-bold mb-1">Biogas Production</p>
+          <p class="text-3xl font-bold text-white tracking-tight">
+            <span id="out-biogas">0</span> <span class="text-base text-slate-500 font-normal">m³/day</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-[#3A4151] p-6 rounded-2xl shadow-xl flex items-center gap-5 relative overflow-hidden group">
+        <div class="absolute inset-0 bg-gradient-to-br from-yellow-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div class="p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20 z-10">
+          <i data-lucide="zap" class="w-8 h-8 text-yellow-500"></i>
+        </div>
+        <div class="z-10">
+          <p class="text-sm text-slate-400 font-bold mb-1">Electricity Generation</p>
+          <p class="text-3xl font-bold text-white tracking-tight">
+            <span id="out-electricity">0</span> <span class="text-base text-slate-500 font-normal">kWh/day</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="bg-[#3A4151] p-6 rounded-2xl shadow-xl flex items-center gap-5 relative overflow-hidden group">
+        <div class="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+        <div class="p-4 bg-green-500/10 rounded-xl border border-green-500/20 z-10">
+          <i data-lucide="sprout" class="w-8 h-8 text-green-500"></i>
+        </div>
+        <div class="z-10">
+          <p class="text-sm text-slate-400 font-bold mb-1">Digestate Output</p>
+          <p class="text-3xl font-bold text-white tracking-tight">
+            <span id="out-digestate">0</span> <span class="text-base text-slate-500 font-normal">kg/day</span>
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Educational Info -->
+    <div class="bg-[#3A4151] p-6 sm:p-8 rounded-2xl shadow-xl relative overflow-hidden">
+      <div class="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
+        <i data-lucide="factory" class="w-64 h-64"></i>
+      </div>
+      
+      <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+        <i data-lucide="info" class="text-[#82DB89] w-6 h-6"></i>
+        The 4 Stages of Anaerobic Digestion
+      </h3>
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative z-10">
+        <div class="bg-[#212735]/40 p-5 rounded-xl border border-white/5 hover:border-[#82DB89]/30 transition-colors">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-[#82DB89]/20 text-[#82DB89] font-bold text-sm border border-[#82DB89]/30">1</span>
+            <strong class="text-[#82DB89] text-lg font-bold">Hydrolysis</strong>
+          </div>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Complex organic matter (carbohydrates, proteins, fats) is broken down into soluble molecules like sugars and amino acids by fermentative bacteria.
+          </p>
+        </div>
+        
+        <div class="bg-[#212735]/40 p-5 rounded-xl border border-white/5 hover:border-teal-500/30 transition-colors">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-teal-500/20 text-teal-400 font-bold text-sm border border-teal-500/30">2</span>
+            <strong class="text-teal-400 text-lg font-bold">Acidogenesis</strong>
+          </div>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            The soluble molecules are converted into volatile fatty acids (VFAs), ammonia, carbon dioxide, and hydrogen sulfide by acidogenic bacteria.
+          </p>
+        </div>
+        
+        <div class="bg-[#212735]/40 p-5 rounded-xl border border-white/5 hover:border-orange-500/30 transition-colors">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-orange-500/20 text-orange-400 font-bold text-sm border border-orange-500/30">3</span>
+            <strong class="text-orange-400 text-lg font-bold">Acetogenesis</strong>
+          </div>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            VFAs are further digested by acetogens to produce acetic acid, carbon dioxide, and hydrogen. This prepares the material for the final stage.
+          </p>
+        </div>
+        
+        <div class="bg-[#212735]/40 p-5 rounded-xl border border-white/5 hover:border-yellow-500/30 transition-colors">
+          <div class="flex items-center gap-3 mb-3">
+            <span class="flex items-center justify-center w-8 h-8 rounded-full bg-yellow-500/20 text-yellow-400 font-bold text-sm border border-yellow-500/30">4</span>
+            <strong class="text-yellow-400 text-lg font-bold">Methanogenesis</strong>
+          </div>
+          <p class="text-sm text-slate-400 leading-relaxed">
+            Methanogens (archaea) convert acetic acid and hydrogen into methane (CH₄) and carbon dioxide (CO₂)—the main components of biogas.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Toggle Button -->
+  <button id="fullscreen-btn" class="fixed bottom-6 right-6 p-4 bg-slate-800/40 hover:bg-slate-800/80 text-slate-500 hover:text-white rounded-full backdrop-blur transition-all duration-300 z-50 focus:outline-none" title="Toggle Fullscreen">
+    <i data-lucide="maximize" id="icon-fs-enter" class="w-5 h-5"></i>
+    <i data-lucide="minimize" id="icon-fs-exit" class="w-5 h-5 hidden"></i>
+  </button>
+
+  <script>
+    // 渲染图表替换
+    lucide.createIcons();
+
+    // ========= Core Variables =========
+    const inputs = {
+      feedstock: document.getElementById('input-feedstock'),
+      temperature: document.getElementById('input-temperature'),
+      mixing: document.getElementById('input-mixing')
+    };
+    const values = {
+      feedstock: document.getElementById('val-feedstock'),
+      temperature: document.getElementById('val-temperature'),
+      mixing: document.getElementById('val-mixing')
+    };
+
+    // ========= Core Logic & DOM Update =========
+    function updateSimulation() {
+      // 1. 获取输入数据
+      const feedstock = Number(inputs.feedstock.value);
+      const temperature = Number(inputs.temperature.value);
+      const mixingSpeed = Number(inputs.mixing.value);
+
+      // 同步显示的输入值
+      values.feedstock.textContent = feedstock;
+      values.temperature.textContent = temperature;
+      values.mixing.textContent = mixingSpeed;
+
+      // 2. 派生计算 (Derived metrics) 原逻辑
+      const meso_eff = Math.exp(-Math.pow(temperature - 38, 2) / (2 * Math.pow(6, 2)));
+      const thermo_eff = Math.exp(-Math.pow(temperature - 55, 2) / (2 * Math.pow(4, 2))) * 1.2;
+      
+      let tempEfficiency = Math.max(meso_eff, thermo_eff);
+      if (temperature < 20) tempEfficiency = Math.max(tempEfficiency, 0.05);
+
+      const mixEfficiency = 0.4 + (mixingSpeed / 100) * 0.6;
+      const baseBiogas = feedstock * 0.15; // 0.15 m3 per kg
+      
+      const biogasProduction = Math.round(baseBiogas * tempEfficiency * mixEfficiency);
+      const electricity = Math.round(biogasProduction * 2.1);
+      const digestate = (feedstock * 0.85).toFixed(1);
+      const efficiency = Math.round(tempEfficiency * mixEfficiency * 100);
+
+      // 3. 决定系统健康状态原逻辑
+      let health = 'Optimal';
+      let healthBoxClass = 'text-green-400 border-green-400/30 bg-green-400/10';
+      let showIcon = 'hi-activity';
+
+      if (temperature < 25) {
+        health = 'Warning: Too Cold';
+        healthBoxClass = 'text-blue-400 border-blue-400/30 bg-blue-400/10';
+        showIcon = 'hi-thermometer';
+      } else if (temperature > 45 && temperature < 50) {
+        health = 'Warning: Temp Transition Zone';
+        healthBoxClass = 'text-yellow-400 border-yellow-400/30 bg-yellow-400/10';
+        showIcon = 'hi-alert';
+      } else if (temperature > 62) {
+        health = 'Danger: Bacteria Dying';
+        healthBoxClass = 'text-red-500 border-red-500/30 bg-red-500/10';
+        showIcon = 'hi-alert';
+      } else if (feedstock > 850) {
+        health = 'Warning: Overloading Risk';
+        healthBoxClass = 'text-orange-400 border-orange-400/30 bg-orange-400/10';
+        showIcon = 'hi-alert';
+      }
+
+      // 4. 更新面板数据
+      document.getElementById('out-efficiency').textContent = `${efficiency}%`;
+      document.getElementById('out-health').textContent = health;
+      document.getElementById('out-biogas').textContent = biogasProduction.toLocaleString();
+      document.getElementById('out-electricity').textContent = electricity.toLocaleString();
+      document.getElementById('out-digestate').textContent = digestate;
+
+      // 更新健康色彩与图标显示隐藏
+      const healthBox = document.getElementById('health-box');
+      healthBox.className = `px-4 py-2 rounded-xl border flex items-center gap-2 flex-1 sm:flex-none justify-center ${healthBoxClass}`;
+      document.getElementById('hi-activity').style.display = showIcon === 'hi-activity' ? 'block' : 'none';
+      document.getElementById('hi-thermometer').style.display = showIcon === 'hi-thermometer' ? 'block' : 'none';
+      document.getElementById('hi-alert').style.display = showIcon === 'hi-alert' ? 'block' : 'none';
+
+      // 5. 更新交互动画
+      // (1) Reception IN mark
+      const inBadge = document.getElementById('anim-in-badge');
+      if(feedstock > 0) {
+        inBadge.style.display = 'block';
+        inBadge.style.setProperty('--anim-duration', `${Math.max(0.3, 1000 / feedstock)}s`);
+      } else {
+        inBadge.style.display = 'none';
+      }
+
+      // (2) Arrow Flows Opacity
+      document.getElementById('anim-arrow-1').style.setProperty('--arrow-base-opacity', feedstock > 0 ? '1' : '0.2');
+      document.getElementById('anim-arrow-top').style.setProperty('--arrow-base-opacity', biogasProduction > 0 ? '1' : '0.2');
+      document.getElementById('anim-arrow-bottom').style.setProperty('--arrow-base-opacity', feedstock > 0 ? '1' : '0.2');
+
+      // (3) Slurry level and Mix Wobble
+      const slurry = document.getElementById('anim-slurry');
+      slurry.style.height = `${30 + (feedstock / 1000) * 50}%`;
+      if (mixingSpeed > 0) {
+        slurry.style.setProperty('--wobble-duration', `${Math.max(0.5, 3 - (mixingSpeed / 50))}s`);
+        slurry.classList.add('anim-slurry-wobble');
+      } else {
+        slurry.classList.remove('anim-slurry-wobble');
+      }
+
+      // (4) Bubbles mapping (Max 12 bubbles)
+      const visibleBubbles = biogasProduction > 0 ? Math.min(12, Math.ceil(biogasProduction / 100)) : 0;
+      const bubbles = document.querySelectorAll('.sys-bubble');
+      bubbles.forEach((b, index) => {
+        b.style.display = index < visibleBubbles ? 'block' : 'none';
+      });
+
+      // (5) Digester Temperature Colors
+      document.getElementById('out-digester-temp').textContent = `${temperature}°C`;
+      const tempIcon = document.getElementById('icon-digester-temp');
+      tempIcon.classList.remove('text-blue-400', 'text-green-500', 'text-orange-500');
+      if (temperature > 50) {
+        tempIcon.classList.add('text-orange-500');
+      } else if (temperature > 30) {
+        tempIcon.classList.add('text-green-500');
+      } else {
+        tempIcon.classList.add('text-blue-400');
+      }
+
+      // (6) Outputs static visual feedback
+      const biogasIcon = document.getElementById('icon-biogas');
+      const digestateIcon = document.getElementById('icon-digestate');
+      document.getElementById('anim-chp').style.display = electricity > 0 ? 'flex' : 'none';
+      
+      biogasIcon.classList.toggle('text-orange-500', biogasProduction > 0);
+      biogasIcon.classList.toggle('text-slate-600', biogasProduction === 0);
+      
+      digestateIcon.classList.toggle('text-green-500', feedstock > 0);
+      digestateIcon.classList.toggle('text-slate-600', feedstock === 0);
+    }
+
+    // ========= Initialize Event Listeners =========
+    inputs.feedstock.addEventListener('input', updateSimulation);
+    inputs.temperature.addEventListener('input', updateSimulation);
+    inputs.mixing.addEventListener('input', updateSimulation);
+
+    // Initial Trigger
+    updateSimulation();
+
+    // ========= Fullscreen Logic =========
+    const fsBtn = document.getElementById('fullscreen-btn');
+    const iconEnter = document.getElementById('icon-fs-enter');
+    const iconExit = document.getElementById('icon-fs-exit');
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.warn(`Error attempting to enable fullscreen: ${err.message}`);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    fsBtn.addEventListener('click', toggleFullScreen);
+
+    // 监听全屏状态变化以同步按钮图标 (应对用户按 Esc 退出全屏等情况)
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) {
+        iconEnter.style.display = 'none';
+        iconExit.style.display = 'block';
+      } else {
+        iconEnter.style.display = 'block';
+        iconExit.style.display = 'none';
+      }
+    });
+  </script>
+</body>
+</html>
